@@ -1,11 +1,43 @@
 import type { Software } from "../types/index.js";
 
+export interface ManifestOptions {
+  /**
+   * Real CFBundleVersion of the packaged app, read from its Info.plist.
+   * Falls back to the marketing version when unknown (packages compiled
+   * before this field was recorded).
+   */
+  bundleVersion?: string;
+  /**
+   * Advertise a bundle-version that outranks whatever is already installed so
+   * iOS treats the payload as an upgrade instead of rejecting it.
+   */
+  force?: boolean;
+}
+
+/**
+ * iOS compares the manifest's `bundle-version` against the installed app's
+ * CFBundleVersion to decide whether an itms-services payload is a valid
+ * upgrade. Reinstalling the same version, or installing an older one (the
+ * whole point of picking a version from the version history), loses that
+ * comparison and iOS refuses with "Unable to Install".
+ *
+ * This sentinel wins every comparison — it outranks 10-digit date-style build
+ * numbers such as 2026081201. It only steers that upgrade decision; the payload
+ * still installs whatever version it actually contains.
+ */
+export const FORCE_UPDATE_BUNDLE_VERSION = "9999999999.9999.9999";
+
 export function buildManifest(
   software: Software,
   payloadUrl: string,
   displayImageSmallUrl: string,
   displayImageLargeUrl: string,
+  options: ManifestOptions = {},
 ): string {
+  const bundleVersion = options.force
+    ? FORCE_UPDATE_BUNDLE_VERSION
+    : (options.bundleVersion ?? software.version);
+
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -39,7 +71,7 @@ export function buildManifest(
                 <key>bundle-identifier</key>
                 <string>${escapeXml(software.bundleID)}</string>
                 <key>bundle-version</key>
-                <string>${escapeXml(software.version)}</string>
+                <string>${escapeXml(bundleVersion)}</string>
                 <key>kind</key>
                 <string>software</string>
                 <key>title</key>

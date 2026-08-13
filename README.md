@@ -95,6 +95,14 @@ AssppWeb relies on the Wisp protocol over WebSocket (`/wisp/`) for its zero-trus
 
 </details>
 
+## Updating an Installed App
+
+**Install on Device** overwrites the copy already on your device. Updates, reinstalls of the same version, and downgrades to an older version all install in place and keep the app's data — you do not need to delete the app first.
+
+This works because the install manifest advertises a build number high enough to outrank whatever is installed. iOS uses that value only to decide whether the payload is a valid upgrade; the app that actually installs is the version shown on the package page. Untick **Force overwrite** there to advertise the package's real build number instead.
+
+> **Still getting "Unable to Install"?** The copy on your device was installed with a different Apple ID. iOS refuses to let one Apple ID's app overwrite another's, and no server setting can change that — delete the installed app, then install again.
+
 ## Security Recommendations
 
 **DDoS Protection**

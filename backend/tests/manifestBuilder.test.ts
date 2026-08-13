@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { buildManifest, getWhitePng } from "../src/services/manifestBuilder.js";
+import {
+  buildManifest,
+  getWhitePng,
+  FORCE_UPDATE_BUNDLE_VERSION,
+} from "../src/services/manifestBuilder.js";
 import type { Software } from "../src/types/index.js";
 
 const mockSoftware: Software = {
@@ -100,6 +104,50 @@ describe("manifestBuilder", () => {
 
       expect(manifest).toContain("Test &amp; &lt;App&gt; &quot;Special&quot;");
       expect(manifest).not.toContain("Test & <App>");
+    });
+  });
+
+  describe("bundle-version", () => {
+    function bundleVersionOf(manifest: string): string {
+      const match = manifest.match(
+        /<key>bundle-version<\/key>\s*<string>([^<]*)<\/string>/,
+      );
+      return match ? match[1] : "";
+    }
+
+    function build(options?: Parameters<typeof buildManifest>[4]): string {
+      return buildManifest(
+        mockSoftware,
+        "https://example.com/payload.ipa",
+        "https://example.com/small.png",
+        "https://example.com/large.png",
+        options,
+      );
+    }
+
+    it("advertises the real CFBundleVersion when given one", () => {
+      expect(bundleVersionOf(build({ bundleVersion: "2026081201" }))).toBe(
+        "2026081201",
+      );
+    });
+
+    it("falls back to the marketing version for legacy packages", () => {
+      // Packages compiled before the build number was recorded have no
+      // bundleVersion; the manifest must still name some version.
+      expect(bundleVersionOf(build())).toBe("1.0.0");
+    });
+
+    it("emits the sentinel when forcing, ignoring the real build number", () => {
+      const manifest = build({ bundleVersion: "2026081201", force: true });
+      expect(bundleVersionOf(manifest)).toBe(FORCE_UPDATE_BUNDLE_VERSION);
+      expect(manifest).not.toContain("2026081201");
+    });
+
+    it("uses a sentinel that outranks date-style build numbers", () => {
+      // iOS refuses the payload unless the manifest version sorts above the
+      // installed app's CFBundleVersion, which is often a 10-digit date.
+      const [major] = FORCE_UPDATE_BUNDLE_VERSION.split(".");
+      expect(Number(major)).toBeGreaterThan(2999999999);
     });
   });
 

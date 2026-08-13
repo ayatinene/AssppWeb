@@ -22,6 +22,8 @@ function createMockIPA(
     addManifest?: boolean;
     sinfPaths?: string[];
     executableName?: string;
+    bundleVersion?: string;
+    shortVersion?: string;
   },
 ): string {
   const zip = new AdmZip();
@@ -30,6 +32,10 @@ function createMockIPA(
   const infoPlistXml = plist.build({
     CFBundleExecutable: execName,
     CFBundleIdentifier: `com.example.${bundleName.toLowerCase()}`,
+    ...(opts?.bundleVersion ? { CFBundleVersion: opts.bundleVersion } : {}),
+    ...(opts?.shortVersion
+      ? { CFBundleShortVersionString: opts.shortVersion }
+      : {}),
   });
   zip.addFile(
     `Payload/${bundleName}.app/Info.plist`,
@@ -178,5 +184,26 @@ describe("sinfInjector", () => {
     expect(resultZip.readFile(manifestEntry!)!.toString()).toBe(
       "manifest sinf",
     );
+  });
+
+  it("should return the versions from the packaged Info.plist", async () => {
+    const ipaPath = createMockIPA("Versioned", {
+      bundleVersion: "2026081201",
+      shortVersion: "8.0.61",
+    });
+    const sinfData = Buffer.from("sinf").toString("base64");
+
+    const version = await inject([{ id: 1, sinf: sinfData }], ipaPath);
+
+    expect(version.bundleVersion).toBe("2026081201");
+    expect(version.bundleShortVersion).toBe("8.0.61");
+  });
+
+  it("should report no versions when Info.plist omits them", async () => {
+    const ipaPath = createMockIPA("Unversioned");
+    const version = await inject([], ipaPath);
+
+    expect(version.bundleVersion).toBeUndefined();
+    expect(version.bundleShortVersion).toBeUndefined();
   });
 });

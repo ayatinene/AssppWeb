@@ -80,6 +80,7 @@ function persistTasks() {
     .map((t) => ({
       id: t.id,
       software: t.software,
+      bundleVersion: t.bundleVersion,
       accountHash: t.accountHash,
       downloadURL: "",
       sinfs: [],
@@ -207,6 +208,7 @@ function initOnStartup() {
             const task: DownloadTask = {
               id: item.id,
               software: item.software,
+              bundleVersion: item.bundleVersion,
               accountHash: item.accountHash,
               downloadURL: "",
               sinfs: [],
@@ -389,6 +391,7 @@ export function createTask(
   downloadURL: string,
   sinfs: Sinf[],
   iTunesMetadata?: string,
+  bundleVersion?: string,
 ): DownloadTask {
   // Validate download URL
   validateDownloadURL(downloadURL);
@@ -401,6 +404,7 @@ export function createTask(
   const task: DownloadTask = {
     id: uuidv4(),
     software,
+    bundleVersion,
     accountHash,
     downloadURL,
     sinfs,
@@ -488,7 +492,17 @@ async function startDownload(task: DownloadTask) {
       task.progress = 100;
       notifyProgress(task);
 
-      await inject(task.sinfs, filePath, task.iTunesMetadata);
+      const ipaVersion = await inject(
+        task.sinfs,
+        filePath,
+        task.iTunesMetadata,
+      );
+
+      // The packaged Info.plist is the authoritative CFBundleVersion; only
+      // fall back to the client-supplied value when it cannot be read.
+      if (ipaVersion.bundleVersion) {
+        task.bundleVersion = ipaVersion.bundleVersion;
+      }
     }
 
     task.status = "completed";

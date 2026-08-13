@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import express, { Request, Response } from "express";
 import request from "supertest";
 import { createServer, Server } from "http";
@@ -6,6 +6,20 @@ import settingsRoutes from "../src/routes/settings.js";
 import installRoutes from "../src/routes/install.js";
 import { getBaseUrl } from "../src/routes/install.js";
 import downloadRoutes from "../src/routes/downloads.js";
+import { FORCE_UPDATE_BUNDLE_VERSION } from "../src/services/manifestBuilder.js";
+import type { DownloadTask, Software } from "../src/types/index.js";
+
+// The install routes look tasks up through the download manager. Keep the rest
+// of that module real so the download-route tests below are unaffected.
+const { installableTasks } = vi.hoisted(() => ({
+  installableTasks: [] as DownloadTask[],
+}));
+
+vi.mock("../src/services/downloadManager.js", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("../src/services/downloadManager.js")>();
+  return { ...actual, getAllTasks: () => installableTasks };
+});
 
 function createApp() {
   const app = express();
@@ -117,6 +131,95 @@ describe("Install Route", () => {
     const res = await request(app).get("/api/install/any-id/icon-large.png");
     expect(res.status).toBe(200);
     expect(res.headers["content-type"]).toContain("image/png");
+  });
+});
+
+describe("Install Route — manifest versions", () => {
+  const app = createApp();
+
+  const software: Software = {
+    id: 12345,
+    bundleID: "com.example.testapp",
+    name: "Test App",
+    version: "8.0.61",
+    artistName: "Test Developer",
+    sellerName: "Test Developer Inc.",
+    description: "A test application",
+    averageUserRating: 4.5,
+    userRatingCount: 1000,
+    artworkUrl: "https://example.com/icon.png",
+    screenshotUrls: [],
+    minimumOsVersion: "15.0",
+    releaseDate: "2024-01-01",
+    primaryGenreName: "Utilities",
+  };
+
+  function addTask(id: string, bundleVersion?: string) {
+    installableTasks.push({
+      id,
+      software,
+      bundleVersion,
+      accountHash: "abcdef1234567890",
+      downloadURL: "",
+      sinfs: [],
+      status: "completed",
+      progress: 100,
+      speed: "0 B/s",
+      filePath: `/tmp/${id}.ipa`,
+      createdAt: new Date().toISOString(),
+    });
+  }
+
+  function bundleVersionOf(manifest: string): string {
+    const match = manifest.match(
+      /<key>bundle-version<\/key>\s*<string>([^<]*)<\/string>/,
+    );
+    return match ? match[1] : "";
+  }
+
+  beforeAll(() => {
+    addTask("forced-task", "2026081201");
+    addTask("legacy-task");
+  });
+
+  afterAll(() => {
+    installableTasks.length = 0;
+  });
+
+  it("forces the upgrade by default", async () => {
+    const res = await request(app).get(
+      "/api/install/forced-task/manifest.plist",
+    );
+    expect(res.status).toBe(200);
+    expect(res.headers["content-type"]).toContain("xml");
+    expect(bundleVersionOf(res.text)).toBe(FORCE_UPDATE_BUNDLE_VERSION);
+  });
+
+  it("advertises the real CFBundleVersion with ?force=0", async () => {
+    const res = await request(app).get(
+      "/api/install/forced-task/manifest.plist?force=0",
+    );
+    expect(res.status).toBe(200);
+    expect(bundleVersionOf(res.text)).toBe("2026081201");
+  });
+
+  it("falls back to the marketing version for packages without a build", async () => {
+    const res = await request(app).get(
+      "/api/install/legacy-task/manifest.plist?force=0",
+    );
+    expect(res.status).toBe(200);
+    expect(bundleVersionOf(res.text)).toBe("8.0.61");
+  });
+
+  it("returns both the forced and strict install URLs", async () => {
+    const res = await request(app).get("/api/install/forced-task/url");
+    expect(res.status).toBe(200);
+    expect(res.body.installUrl).toContain("itms-services://");
+    expect(res.body.manifestUrl).not.toContain("force=0");
+    expect(res.body.strictManifestUrl).toContain("force=0");
+    expect(res.body.strictInstallUrl).toContain(
+      encodeURIComponent(res.body.strictManifestUrl),
+    );
   });
 });
 

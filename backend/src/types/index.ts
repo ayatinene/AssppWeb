@@ -27,6 +27,11 @@ export interface Sinf {
 export interface DownloadTask {
   id: string;
   software: Software;
+  // Real CFBundleVersion of the packaged app (build number). Distinct from
+  // software.version, which is the marketing CFBundleShortVersionString.
+  // iOS compares this against the installed app when deciding whether an
+  // itms-services payload is a valid upgrade — see services/manifestBuilder.ts
+  bundleVersion?: string;
   accountHash: string;
   downloadURL: string;
   sinfs: Sinf[];

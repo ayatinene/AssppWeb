@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { QRCodeSVG } from "qrcode.react";
 import PageContainer from "../Layout/PageContainer";
 import AppIcon from "../common/AppIcon";
+import Alert from "../common/Alert";
 import Badge from "../common/Badge";
 import ProgressBar from "../common/ProgressBar";
 import Modal from "../common/Modal";
@@ -35,6 +36,9 @@ export default function PackageDetail() {
   const [latestApp, setLatestApp] = useState<Software | null>(null);
   const [availableVersions, setAvailableVersions] = useState<string[]>([]);
   const [selectedVersion, setSelectedVersion] = useState<string>("");
+  // Installing over an app that is already on the device is the common case,
+  // so the manifest forces the upgrade unless the user opts out.
+  const [forceInstall, setForceInstall] = useState(true);
 
   const task = tasks.find((t) => t.id === id);
 
@@ -51,7 +55,9 @@ export default function PackageDetail() {
   const isActive = task.status === "downloading" || task.status === "injecting";
   const isPaused = task.status === "paused";
   const isCompleted = task.status === "completed";
-  const installInfo = isCompleted ? getInstallInfo(task.id) : null;
+  const installInfo = isCompleted
+    ? getInstallInfo(task.id, forceInstall)
+    : null;
 
   const accountEmail = hashToEmail[task.accountHash];
   const account = accounts.find((a) => a.email === accountEmail);
@@ -210,6 +216,16 @@ export default function PackageDetail() {
                 {task.software.version}
               </dd>
             </div>
+            {task.bundleVersion && (
+              <div className="flex justify-between">
+                <dt className="text-gray-500 dark:text-gray-400 flex-shrink-0">
+                  {t("downloads.package.build")}
+                </dt>
+                <dd className="text-gray-900 dark:text-gray-200 min-w-0 truncate ml-4">
+                  {task.bundleVersion}
+                </dd>
+              </div>
+            )}
             <div className="flex justify-between">
               <dt className="text-gray-500 dark:text-gray-400 flex-shrink-0">
                 {t("downloads.package.account")}
@@ -326,6 +342,30 @@ export default function PackageDetail() {
               {t("downloads.package.delete")}
             </button>
           </div>
+
+          {installInfo && (
+            <>
+              <label className="flex items-start gap-2 text-sm text-gray-600 dark:text-gray-400 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={forceInstall}
+                  onChange={(e) => setForceInstall(e.target.checked)}
+                  className="mt-0.5 rounded border-gray-300 dark:border-gray-700 text-blue-600 focus:ring-1 focus:ring-blue-500"
+                />
+                <span>
+                  <span className="font-medium text-gray-900 dark:text-gray-200">
+                    {t("downloads.package.forceInstall")}
+                  </span>{" "}
+                  {t("downloads.package.forceInstallHint")}
+                </span>
+              </label>
+              {forceInstall && (
+                <Alert type="warning">
+                  {t("downloads.package.forceInstallWarning")}
+                </Alert>
+              )}
+            </>
+          )}
         </div>
       </div>
 

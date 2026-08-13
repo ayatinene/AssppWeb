@@ -16,14 +16,24 @@ interface IpaMetadata {
   bundleName: string;
   manifest: { sinfPaths: string[] } | null;
   info: { bundleExecutable: string } | null;
+  version: IpaVersion;
+}
+
+/** Version strings read from the packaged app's Info.plist. */
+export interface IpaVersion {
+  /** CFBundleVersion — the build number iOS compares on upgrade. */
+  bundleVersion?: string;
+  /** CFBundleShortVersionString — the marketing version. */
+  bundleShortVersion?: string;
 }
 
 export async function inject(
   sinfs: Sinf[],
   ipaPath: string,
   iTunesMetadata?: string,
-): Promise<void> {
-  const { bundleName, manifest, info } = await readIpaMetadata(ipaPath);
+): Promise<IpaVersion> {
+  const { bundleName, manifest, info, version } =
+    await readIpaMetadata(ipaPath);
 
   // Collect all files to inject
   const filesToInject: { entryPath: string; data: Buffer }[] = [];
@@ -72,6 +82,8 @@ export async function inject(
   if (filesToInject.length > 0) {
     await addFilesToZip(ipaPath, filesToInject);
   }
+
+  return version;
 }
 
 async function streamToBuffer(stream: Readable): Promise<Buffer> {
@@ -142,6 +154,7 @@ async function readIpaMetadata(ipaPath: string): Promise<IpaMetadata> {
 
     // Parse info plist
     let info: { bundleExecutable: string } | null = null;
+    const version: IpaVersion = {};
     if (infoPlistData) {
       const parsed = parsePlistBuffer(infoPlistData);
       if (parsed) {
@@ -149,13 +162,24 @@ async function readIpaMetadata(ipaPath: string): Promise<IpaMetadata> {
         if (typeof executable === "string") {
           info = { bundleExecutable: executable };
         }
+        version.bundleVersion = readVersionString(parsed["CFBundleVersion"]);
+        version.bundleShortVersion = readVersionString(
+          parsed["CFBundleShortVersionString"],
+        );
       }
     }
 
-    return { bundleName, manifest, info };
+    return { bundleName, manifest, info, version };
   } finally {
     await zip.close();
   }
+}
+
+/** Info.plist versions are normally strings, but tolerate numeric values. */
+function readVersionString(value: unknown): string | undefined {
+  if (typeof value === "string" && value.trim()) return value.trim();
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  return undefined;
 }
 
 async function addFilesToZip(

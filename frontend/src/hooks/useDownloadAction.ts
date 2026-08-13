@@ -60,6 +60,10 @@ export function useDownloadAction() {
 
     await apiPost("/api/downloads", {
       software: { ...app, version: output.bundleShortVersionString },
+      // The build number iOS compares when deciding whether an install
+      // overwrites an existing app. The backend prefers the value it reads
+      // from the compiled IPA and uses this only as a fallback.
+      bundleVersion: output.bundleVersion,
       accountHash: hash,
       downloadURL: output.downloadURL,
       sinfs: output.sinfs,

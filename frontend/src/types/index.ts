@@ -64,6 +64,9 @@ export interface VersionMetadata {
 export interface DownloadTask {
   id: string;
   software: Software;
+  // Real CFBundleVersion (build number) of the packaged app, as opposed to
+  // software.version, which is the marketing CFBundleShortVersionString.
+  bundleVersion?: string;
   accountHash: string;
   status:
     | "pending"

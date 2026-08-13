@@ -51,6 +51,17 @@ function joinUrl(baseUrl: string, path: string): string {
   return `${base}/${suffix}`;
 }
 
+/**
+ * Overwriting an installed app is the common case for this tool, so the
+ * manifest forces the upgrade by default. `?force=0` opts back into the
+ * package's real CFBundleVersion.
+ */
+function wantsForcedVersion(req: Request): boolean {
+  const value = req.query.force;
+  const raw = Array.isArray(value) ? value[0] : value;
+  return raw !== "0" && raw !== "false";
+}
+
 // Manifest plist for iTMS installation
 router.get("/install/:id/manifest.plist", (req: Request, res: Response) => {
   const id = getIdParam(req);
@@ -73,6 +84,7 @@ router.get("/install/:id/manifest.plist", (req: Request, res: Response) => {
     payloadUrl,
     smallIconUrl,
     largeIconUrl,
+    { bundleVersion: task.bundleVersion, force: wantsForcedVersion(req) },
   );
 
   res.setHeader("Content-Type", "application/xml");
@@ -96,7 +108,14 @@ router.get("/install/:id/url", (req: Request, res: Response) => {
     manifestUrl,
   )}`;
 
-  res.json({ installUrl, manifestUrl });
+  // Same package, but advertising its real CFBundleVersion — use when the
+  // forced upgrade is not wanted.
+  const strictManifestUrl = `${manifestUrl}?force=0`;
+  const strictInstallUrl = `itms-services://?action=download-manifest&url=${encodeURIComponent(
+    strictManifestUrl,
+  )}`;
+
+  res.json({ installUrl, manifestUrl, strictInstallUrl, strictManifestUrl });
 });
 
 // Stream IPA payload for installation

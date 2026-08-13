@@ -129,6 +129,15 @@ The backend proxies the bag endpoint via `GET /api/bag?guid=<deviceId>` using No
 - `backend/src/utils/route.ts` — shared Express route helpers (`getIdParam`, `requireAccountHash`, `verifyTaskOwnership`)
 - `backend/src/config.ts` — centralized constants (`MAX_DOWNLOAD_SIZE`, `DOWNLOAD_TIMEOUT_MS`, `BAG_TIMEOUT_MS`, `BAG_MAX_BYTES`, `MIN_ACCOUNT_HASH_LENGTH`) and env-var config (`disableHttpsRedirect` via `UNSAFE_DANGEROUSLY_DISABLE_HTTPS_REDIRECT`)
 
+### Install Manifest Versioning
+
+iOS compares the manifest's `bundle-version` against the installed app's **CFBundleVersion** (build number) when deciding whether an `itms-services://` payload may overwrite an existing app. `Software.version` is the marketing string (`CFBundleShortVersionString`) and must never be treated as that build number — it survives only as a fallback for packages compiled before the build number was recorded.
+
+- `inject()` (`services/sinfInjector.ts`) reads `CFBundleVersion` from the compiled IPA's `Info.plist` and returns it; `downloadManager` stores it on the task as `bundleVersion`. The IPA is authoritative — the value the client posts to `POST /api/downloads` is only used when the IPA cannot be read. It is written to `tasks.json` and restored on startup.
+- `GET /api/install/:id/manifest.plist` forces the upgrade by default, emitting `FORCE_UPDATE_BUNDLE_VERSION` (`manifestBuilder.ts`) so updates, reinstalls, and downgrades are all accepted. `?force=0` advertises the real build number instead.
+- The forced value steers only that upgrade decision — the payload still installs whatever version it contains, so the UI keeps reporting the true version.
+- No manifest version can fix "Unable to Install" when the installed copy belongs to a different Apple ID. The package page warns about this so the two failure modes stay distinguishable.
+
 ## Frontend
 
 - React 19, React Router 7, Zustand for state
